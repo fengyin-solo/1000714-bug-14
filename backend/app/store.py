@@ -27,6 +27,15 @@ class Store:
                 return row
         return None
 
+    def find_by(self, module: str, field: str, value: Any) -> dict[str, Any] | None:
+        """按业务字段定位记录，比如用施工编号把验收单挂到施工任务上。"""
+        if value is None or str(value).strip() == "":
+            return None
+        for row in self.rows(module):
+            if row.get(field) == value:
+                return row
+        return None
+
     def overview(self) -> dict[str, object]:
         modules: list[dict[str, object]] = []
         for name in self.module_names():

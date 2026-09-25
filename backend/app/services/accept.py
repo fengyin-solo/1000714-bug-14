@@ -9,10 +9,19 @@ MODULE = "accept"
 REQUIRED_FIELDS = ["验收单号", "关联施工", "验收项目"]
 STATUS_ORDER = ["待验收", "验收中", "已通过", "需返工"]
 ACTION_RULES = {"开始验收": "验收中", "确认通过": "已通过", "下发返工": "需返工"}
-NEGATIVE_ACTIONS = []
+NEGATIVE_ACTIONS: list[str] = []
 
 
 class AcceptService:
+    def _serialize(self, row: dict[str, Any]) -> dict[str, Any]:
+        """验收单挂到施工任务上：完工日期直接取施工任务的那一份，不再各存各的。"""
+        item = dict(row)
+        status = str(row.get("status") or "")
+        item["验收状态"] = status or row.get("验收状态")
+        work = store.find_by("work", "施工编号", row.get("关联施工"))
+        item["完工日期"] = work.get("完工日期") if work is not None else None
+        return item
+
     def list_entries(
         self,
         *,
@@ -28,10 +37,11 @@ class AcceptService:
             rows = [row for row in rows if row.get("status") == status]
         total = len(rows)
         start = max(page - 1, 0) * size
-        return rows[start:start + size], total
+        return [self._serialize(row) for row in rows[start:start + size]], total
 
     def get_entry(self, entry_id: int) -> dict[str, Any] | None:
-        return store.find(MODULE, entry_id)
+        row = store.find(MODULE, entry_id)
+        return self._serialize(row) if row is not None else None
 
     def create_entry(self, values: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
         missing = [field for field in REQUIRED_FIELDS if not str(values.get(field) or "").strip()]
@@ -44,7 +54,7 @@ class AcceptService:
         entry["pending"] = True
         entry["abnormal"] = False
         rows.append(entry)
-        return entry, []
+        return self._serialize(entry), []
 
     def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
         entry = store.find(MODULE, entry_id)
@@ -58,4 +68,4 @@ class AcceptService:
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
-        return entry, f"验收单已{action}"
+        return self._serialize(entry), f"验收单已{action}"

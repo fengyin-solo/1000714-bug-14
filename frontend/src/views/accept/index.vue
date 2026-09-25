@@ -70,7 +70,7 @@ import { request } from '@/api/client'
 type Row = Record<string, string | number | null>
 
 const ENDPOINT = '/api/accept'
-const columns = ["验收单号", "关联施工", "验收项目", "验收标准", "验收结论", "验收人员", "验收日期", "验收状态"]
+const columns = ["验收单号", "关联施工", "完工日期", "验收项目", "验收标准", "验收结论", "验收人员", "验收日期", "验收状态"]
 const actions = ["开始验收", "确认通过", "下发返工"]
 const statuses = ["待验收", "验收中", "已通过", "需返工"]
 const stats = [{"label": "待验收单据", "value": 0}, {"label": "本月通过数", "value": 0}, {"label": "需返工项数", "value": 0}]
