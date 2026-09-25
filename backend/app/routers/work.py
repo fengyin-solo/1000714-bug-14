@@ -30,13 +30,35 @@ def list_entries(
     return PageResult(items=items, total=total, page=page, size=size)
 
 
+@router.get("/stats", response_model=dict)
+def stats() -> dict[str, Any]:
+    """列表页统计卡片：与列表读同一份数据，未开工的任务不计入进行中。"""
+    return {"items": service.stats()}
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出养护施工清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "work", "total": total, "items": items}
+
+
 @router.get("/{entry_id}", response_model=dict)
 def get_entry(entry_id: int) -> dict:
-    """读取单条施工任务明细；不存在时给出可读的错误说明。"""
+    """读取单条施工任务明细；与列表同一份数据，进度口径一致。"""
     entry = service.get_entry(entry_id)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"施工任务 {entry_id} 不存在或已归档")
     return entry
+
+
+@router.put("/{entry_id}", response_model=ActionResult)
+def update_entry(entry_id: int, payload: EntryPayload) -> ActionResult:
+    """保存编辑内容（如更换承接单位）；保存后列表与详情立即读到新值。"""
+    entry, message = service.update_entry(entry_id, payload.values)
+    if entry is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=entry)
 
 
 @router.post("", response_model=ActionResult)
@@ -56,10 +78,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出养护施工清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "work", "total": total, "items": items}

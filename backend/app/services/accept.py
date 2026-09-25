@@ -12,6 +12,25 @@ ACTION_RULES = {"开始验收": "验收中", "确认通过": "已通过", "下�
 NEGATIVE_ACTIONS = []
 
 
+def _linked_work(row: dict[str, Any]) -> dict[str, Any] | None:
+    """按关联施工编号找到对应的施工任务，验收页与施工页看的是同一条记录。"""
+    code = str(row.get("关联施工") or "").strip()
+    if not code:
+        return None
+    for work in store.rows("work"):
+        if str(work.get("施工编号", "")) == code:
+            return work
+    return None
+
+
+def _serialize(row: dict[str, Any]) -> dict[str, Any]:
+    """输出时带上施工任务的完工日期，验收页不再自己存一份会错位的日期。"""
+    item = dict(row)
+    work = _linked_work(row)
+    item["施工完工日期"] = work.get("完工日期") if work else None
+    return item
+
+
 class AcceptService:
     def list_entries(
         self,
@@ -28,10 +47,13 @@ class AcceptService:
             rows = [row for row in rows if row.get("status") == status]
         total = len(rows)
         start = max(page - 1, 0) * size
-        return rows[start:start + size], total
+        return [_serialize(row) for row in rows[start:start + size]], total
 
     def get_entry(self, entry_id: int) -> dict[str, Any] | None:
-        return store.find(MODULE, entry_id)
+        row = store.find(MODULE, entry_id)
+        if row is None:
+            return None
+        return _serialize(row)
 
     def create_entry(self, values: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
         missing = [field for field in REQUIRED_FIELDS if not str(values.get(field) or "").strip()]
@@ -44,7 +66,7 @@ class AcceptService:
         entry["pending"] = True
         entry["abnormal"] = False
         rows.append(entry)
-        return entry, []
+        return _serialize(entry), []
 
     def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
         entry = store.find(MODULE, entry_id)
@@ -58,4 +80,4 @@ class AcceptService:
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
-        return entry, f"验收单已{action}"
+        return _serialize(entry), f"验收单已{action}"

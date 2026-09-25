@@ -36,7 +36,13 @@
       </thead>
       <tbody>
         <tr v-for="row in rows" :key="String(row.id)">
-          <td v-for="column in columns" :key="column">{{ row[column] ?? '—' }}</td>
+          <td v-for="column in columns" :key="column">
+            <RouterLink v-if="column === '施工编号'" class="link" :to="`/work/${row.id}`">
+              {{ row[column] ?? '—' }}
+            </RouterLink>
+            <span v-else-if="column === '施工进度'">{{ row[column] ?? 0 }}%</span>
+            <template v-else>{{ row[column] ?? '—' }}</template>
+          </td>
           <td class="row-actions">
             <button
               v-for="action in actions"
@@ -70,13 +76,13 @@ import { request } from '@/api/client'
 type Row = Record<string, string | number | null>
 
 const ENDPOINT = '/api/work'
-const columns = ["施工编号", "关联计划", "承接单位", "开工日期", "完工日期", "完成工程量", "监理人员", "施工状态"]
+const columns = ["施工编号", "关联计划", "承接单位", "开工日期", "完工日期", "完成工程量", "监理人员", "施工状态", "施工进度"]
 const actions = ["确认开工", "提交验收", "确认完工"]
 const statuses = ["待开工", "施工中", "待验收", "已完工"]
-const stats = [{"label": "待开工施工", "value": 0}, {"label": "施工中单据", "value": 0}, {"label": "本月完工数", "value": 0}]
 
 const rows = ref<Row[]>([])
 const total = ref(0)
+const stats = ref<{ label: string; value: number }[]>([])
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
@@ -99,7 +105,7 @@ async function runAction(action: string, row: Row) {
   try {
     const response = await request(`${ENDPOINT}/${row.id}/actions`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ values: { action } }),
     })
     if (!response.ok) {
       throw new Error('养护施工动作未生效，请稍后重试')
@@ -114,13 +120,20 @@ async function reload() {
   errorMessage.value = ''
   const query = new URLSearchParams(filters.value as Record<string, string>).toString()
   try {
-    const response = await request(`${ENDPOINT}?${query}`)
-    if (!response.ok) {
+    const [listResponse, statsResponse] = await Promise.all([
+      request(`${ENDPOINT}?${query}`),
+      request(`${ENDPOINT}/stats`),
+    ])
+    if (!listResponse.ok) {
       throw new Error('施工任务列表读取失败')
     }
-    const payload = await response.json()
+    const payload = await listResponse.json()
     rows.value = payload.items ?? []
     total.value = payload.total ?? rows.value.length
+    if (statsResponse.ok) {
+      const statsPayload = await statsResponse.json()
+      stats.value = statsPayload.items ?? []
+    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '养护施工列表读取失败'
   }
